@@ -1,5 +1,4 @@
 #include "darknet.h"
-
 static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
 
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear)
@@ -232,7 +231,7 @@ void validate_detector_flip(char *datacfg, char *cfgfile, char *weightfile, char
     int j;
     list *options = read_data_cfg(datacfg);
     char *valid_images = option_find_str(options, "valid", "data/train.list");
-    char *name_list = option_find_str(options, "names", "data/names.list");
+    char *name_list = option_find_str(options, "names", "data/voc.names");
     char *prefix = option_find_str(options, "results", "results");
     char **names = get_labels(name_list);
     char *mapf = option_find_str(options, "map", 0);
@@ -577,6 +576,21 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     char *input = buff;
     int j;
     float nms=.3;
+
+    //read file form TXT
+    FILE *fp;
+    char image_file[256];
+    if ((fp = fopen("/tmp/aaa", "rt")) == NULL){
+          printf("Cannot open file!!\n");
+          exit(1);
+    }
+    while(fgets(image_file, 256, fp) != NULL){ 
+          
+      	input = image_file;
+        if(!input) return;
+        strtok(input, "\n");
+
+/*
     while(1){
         if(filename){
             strncpy(input, filename, 256);
@@ -587,6 +601,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             if(!input) return;
             strtok(input, "\n");
         }
+    */
         image im = load_image_color(input,0,0);
         image sized = letterbox_image(im, net->w, net->h);
         //image sized = resize_image(im, net->w, net->h);
@@ -612,8 +627,31 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         //if (nms) do_nms_obj(boxes, probs, l.w*l.h*l.n, l.classes, nms);
         if (nms) do_nms_sort(boxes, probs, l.w*l.h*l.n, l.classes, nms);
         draw_detections(im, l.w*l.h*l.n, thresh, boxes, probs, masks, names, alphabet, l.classes);
+
         if(outfile){
-            save_image(im, outfile);
+		char *token, *saveptr;
+		char *save_name[10];
+		int j;
+		for(j = 1; j++; input = NULL){
+			token = strtok_r(input, "/", &saveptr);
+			if(token == NULL) break;
+			//printf("%d: %s\n", j,token);
+			save_name[j] = token;
+		}
+
+		//printf("save_name: %s\noutfile: %s\n", save_name[j-1],outfile);
+
+		char output_name[256];
+		int outfile_index,save_name_index;
+		for(outfile_index = 0; outfile_index < strlen(outfile); outfile_index++){
+			output_name[outfile_index] = outfile[outfile_index];
+		}
+		for(save_name_index = 0; save_name_index <= strlen(save_name[j-1]); save_name_index++){
+			output_name[outfile_index] = save_name[j-1][save_name_index];
+			outfile_index++;
+		}
+		printf("Saved to:  %s\n",output_name);
+        	save_image(im, output_name);
         }
         else{
             save_image(im, "predictions");
@@ -632,8 +670,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         free_image(sized);
         free(boxes);
         free_ptrs((void **)probs, l.w*l.h*l.n);
-        if (filename) break;
-    }
+        //if (filename) break;
+   }
 }
 
 void run_detector(int argc, char **argv)
