@@ -491,9 +491,9 @@ typedef struct {
 } augment_args;
 
 typedef struct {
-    int w;
-    int h;
-    int c;
+    int w; //width
+    int h; //height
+    int c; //channel
     float *data;
 } image;
 
@@ -520,7 +520,7 @@ typedef enum {
     CLASSIFICATION_DATA, DETECTION_DATA, CAPTCHA_DATA, REGION_DATA, IMAGE_DATA, COMPARE_DATA, WRITING_DATA, SWAG_DATA, TAG_DATA, OLD_CLASSIFICATION_DATA, STUDY_DATA, DET_DATA, SUPER_DATA, LETTERBOX_DATA, REGRESSION_DATA, SEGMENTATION_DATA, INSTANCE_DATA
 } data_type;
 
-typedef struct load_args{
+typedef struct load_args{ //要加载的数据的参数
     int threads;
     char **paths;
     char *path;
@@ -555,8 +555,8 @@ typedef struct load_args{
 
 typedef struct{
     int id;
-    float x,y,w,h;
-    float left, right, top, bottom;
+    float x,y,w,h;//中心点的位置，宽和高
+    float left, right, top, bottom;//框的左右上下所处的位置
 } box_label;
 
 

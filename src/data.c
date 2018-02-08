@@ -408,23 +408,24 @@ void fill_truth_iseg(char *path, int num_boxes, float *truth, int classes, int w
 void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, int flip, float dx, float dy, float sx, float sy)
 {
     char labelpath[4096];
+    //find label follder and TXT
     find_replace(path, "images", "labels", labelpath);
-    find_replace(labelpath, "JPEGImages", "labels", labelpath);
+    find_replace(labelpath, "JPEGImages", "labels", labelpath); 
 
     find_replace(labelpath, "raw", "labels", labelpath);
     find_replace(labelpath, ".jpg", ".txt", labelpath);
     find_replace(labelpath, ".png", ".txt", labelpath);
     find_replace(labelpath, ".JPG", ".txt", labelpath);
-    find_replace(labelpath, ".JPEG", ".txt", labelpath);
+    find_replace(labelpath, ".JPEG", ".txt", labelpath); 
     int count = 0;
-    box_label *boxes = read_boxes(labelpath, &count);
-    randomize_boxes(boxes, count);
+    box_label *boxes = read_boxes(labelpath, &count);//boxes中存的是原始图片的注释，见box_label类
+    randomize_boxes(boxes, count); //打乱boxes中的框的顺序
     correct_boxes(boxes, count, dx, dy, sx, sy, flip);
-    if(count > num_boxes) count = num_boxes;
+    if(count > num_boxes) count = num_boxes;//选用多少个框作为正样本
     float x,y,w,h;
     int id;
     int i;
-
+    //把一张图的所有框的信息弄成一行
     for (i = 0; i < count; ++i) {
         x =  boxes[i].x;
         y =  boxes[i].y;
@@ -943,20 +944,20 @@ data load_data_swag(char **paths, int n, int classes, float jitter)
 
 data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, int classes, float jitter, float hue, float saturation, float exposure)
 {
-    char **random_paths = get_random_paths(paths, n, m);
+    char **random_paths = get_random_paths(paths, n, m); //随机选取n个图片的path
     int i;
     data d = {0};
     d.shallow = 0;
 
     d.X.rows = n;
     d.X.vals = calloc(d.X.rows, sizeof(float*));
-    d.X.cols = h*w*3;
+    d.X.cols = h*w*3; //一列存一张长宽分别是h,w的3个通道的彩色图片
 
-    d.y = make_matrix(n, 5*boxes);
+    d.y = make_matrix(n, 5*boxes);//y存的应该是n张图片的最后预测的框的位置吧，5应该是你每个框的位置回归出的值，boxes应该是每张图片最多回归出的框的个数
     for(i = 0; i < n; ++i){
-        image orig = load_image_color(random_paths[i], 0, 0);
-        image sized = make_image(w, h, orig.c);
-        fill_image(sized, .5);
+        image orig = load_image_color(random_paths[i], 0, 0);//这边没有要求图像的大小，只是把原图给load进来的
+        image sized = make_image(w, h, orig.c);//创建想要的图像大小
+        fill_image(sized, .5);//用0.5初始化sized，注意传进去的时候，里面的data是指针的形式，所以还是会改sized中的data的
 
         float dw = jitter * orig.w;
         float dh = jitter * orig.h;
@@ -977,13 +978,13 @@ data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, in
         float dx = rand_uniform(0, w - nw);
         float dy = rand_uniform(0, h - nh);
 
-        place_image(orig, nw, nh, dx, dy, sized);
+        place_image(orig, nw, nh, dx, dy, sized); //加了数据的抖动
 
         random_distort_image(sized, hue, saturation, exposure);
 
         int flip = rand()%2;
-        if(flip) flip_image(sized);
-        d.X.vals[i] = sized.data;
+        if(flip) flip_image(sized);//按照0.5的可能性去翻转图像
+        d.X.vals[i] = sized.data;//X存的是resize之后图片信息
 
 
         fill_truth_detection(random_paths[i], boxes, d.y.vals[i], classes, flip, -dx/w, -dy/h, nw/w, nh/h);
@@ -1042,7 +1043,7 @@ pthread_t load_data_in_thread(load_args args)
     pthread_t thread;
     struct load_args *ptr = calloc(1, sizeof(struct load_args));
     *ptr = args;
-    if(pthread_create(&thread, 0, load_thread, ptr)) error("Thread creation failed");
+    if(pthread_create(&thread, 0, load_thread, ptr)) error("Thread creation failed");//注意：此刻的是load_thread，不是load_threads
     return thread;
 }
 
@@ -1052,19 +1053,19 @@ void *load_threads(void *ptr)
     load_args args = *(load_args *)ptr;
     if (args.threads == 0) args.threads = 1;
     data *out = args.d;
-    int total = args.n;
+    int total = args.n;//一次加载的数据量
     free(ptr);
-    data *buffers = calloc(args.threads, sizeof(data));
+    data *buffers = calloc(args.threads, sizeof(data));//几个线程就加载几份
     pthread_t *threads = calloc(args.threads, sizeof(pthread_t));
     for(i = 0; i < args.threads; ++i){
-        args.d = buffers + i;
+        args.d = buffers + i;//表示buffers的第i个元素
         args.n = (i+1) * total/args.threads - i * total/args.threads;
-        threads[i] = load_data_in_thread(args);
+        threads[i] = load_data_in_thread(args);//创建几个加载数据的线程
     }
     for(i = 0; i < args.threads; ++i){
-        pthread_join(threads[i], 0);
+        pthread_join(threads[i], 0);//用来等待一个线程的结束,线程间同步的操作
     }
-    *out = concat_datas(buffers, args.threads);
+    *out = concat_datas(buffers, args.threads);//把buffers所指向的几个data类型的都堆叠起来,其实改的还是args.d
     out->shallow = 0;
     for(i = 0; i < args.threads; ++i){
         buffers[i].shallow = 1;
@@ -1087,7 +1088,7 @@ pthread_t load_data(load_args args)
     pthread_t thread;
     struct load_args *ptr = calloc(1, sizeof(struct load_args));
     *ptr = args;
-    if(pthread_create(&thread, 0, load_threads, ptr)) error("Thread creation failed");
+    if(pthread_create(&thread, 0, load_threads, ptr)) error("Thread creation failed");//pthread_create第一个参数：指向线程标示符pthread_t的指针；第二个参数：设置线程的属性（用来指定线程优先级等属性，一般的情况下，我们没有必要修改，使用默认属性来构造线程，所以这里一般取NULL）;第三个参数：线程运行函数的起始地址;第四个参数：运行函数的参数.就是创建一个线程，用于执行该函数。
     return thread;
 }
 
@@ -1268,12 +1269,13 @@ data load_data_tag(char **paths, int n, int m, int k, int min, int max, int size
     return d;
 }
 
+//连接两个矩阵上下堆叠起来
 matrix concat_matrix(matrix m1, matrix m2)
 {
     int i, count = 0;
     matrix m;
     m.cols = m1.cols;
-    m.rows = m1.rows+m2.rows;
+    m.rows = m1.rows+m2.rows;//本来C中数组的各行长度必须一样，但是可以像这样通过指针的方式，给每个指针指定不同长度的数组
     m.vals = calloc(m1.rows + m2.rows, sizeof(float*));
     for(i = 0; i < m1.rows; ++i){
         m.vals[count++] = m1.vals[i];
@@ -1295,12 +1297,13 @@ data concat_data(data d1, data d2)
     return d;
 }
 
+//连接两个矩阵上下堆叠起来
 data concat_datas(data *d, int n)
 {
     int i;
     data out = {0};
     for(i = 0; i < n; ++i){
-        data new = concat_data(d[i], out);
+        data new = concat_data(d[i], out);//连接两个矩阵上下堆叠起来
         free_data(out);
         out = new;
     }

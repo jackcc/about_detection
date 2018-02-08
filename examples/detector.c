@@ -4,14 +4,14 @@ static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,2
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear)
 {
     list *options = read_data_cfg(datacfg);
-    char *train_images = option_find_str(options, "train", "data/train.list");
-    char *backup_directory = option_find_str(options, "backup", "/backup/");
+    char *train_images = option_find_str(options, "train", "data/train.list"); //训练集路径
+    char *backup_directory = option_find_str(options, "backup", "/backup/"); //结果备份路径
 
-    srand(time(0));
-    char *base = basecfg(cfgfile);
-    printf("%s\n", base);
+    srand(time(0));//random seed(current time)
+    char *base = basecfg(cfgfile); //cfg filename
+    printf("cfg file: %s\n", base);
     float avg_loss = -1;
-    network **nets = calloc(ngpus, sizeof(network));
+    network **nets = calloc(ngpus, sizeof(network));//给一个network类型的数组分配空间（其中network结构体包含的是训练网络的参数之类，epoch，subdivisions等，还有网络的总层数n（这边的层数不同于学术上的层数，代码中真正的网络的层数是YOLO-voc.cfg中除了[net]以外有[]标志的），layer的数组layers，cost，目前训练到第多少批的seen
 
     srand(time(0));
     int seed = rand();
@@ -27,11 +27,11 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     srand(time(0));
     network *net = nets[0];
 
-    int imgs = net->batch * net->subdivisions * ngpus;
+    int imgs = net->batch * net->subdivisions * ngpus;//一次载入到显存的图片数量
     printf("Learning Rate: %g, Momentum: %g, Decay: %g\n", net->learning_rate, net->momentum, net->decay);
-    data train, buffer;
+    data train, buffer;//定义两个data类型的变量，每个中应该是都包含检测框的信息
 
-    layer l = net->layers[net->n - 1];
+    layer l = net->layers[net->n - 1];//net.n是net的层数，索引是从0开始的！！
 
     int classes = l.classes;
     float jitter = l.jitter;
@@ -40,43 +40,46 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     //int N = plist->size;
     char **paths = (char **)list_to_array(plist);
 
-    load_args args = get_base_args(net);
+    load_args args = get_base_args(net);//将要加载的数据参数
     args.coords = l.coords;
     args.paths = paths;
-    args.n = imgs;
-    args.m = plist->size;
+    args.n = imgs;//一次加载的数据量
+    args.m = plist->size;//总的数据量
     args.classes = classes;
     args.jitter = jitter;
-    args.num_boxes = l.max_boxes;
+    args.num_boxes = l.max_boxes;//默认是30个
     args.d = &buffer;
     args.type = DETECTION_DATA;
     //args.type = INSTANCE_DATA;
     args.threads = 64;
 
-    pthread_t load_thread = load_data(args);
+    pthread_t load_thread = load_data(args);//返回线程ID，去创建一个执行什么的线程，但是暂时还没有启动这个线程吧。load_data去加载数据的，load_data创建多线程，并且去执行中的load_threads，我之前一直怀疑这样简单去执行一个多线程有啥影响，load_threads又没有个返回值，后来有才发现其实这些参数都是结构体，乍看不是指针，但是里面却包含指针的成员函数，后面就算给结构体赋值给形参，只要对形参的指针的指向内容做改变，这就都改变了。这边可以就认为多线程也就只是去选择在某个时候执行函数罢了。
+        clock_t time;
     double time;
     int count = 0;
     //while(i*imgs < N*120){
     while(get_current_batch(net) < net->max_batches){
-        if(l.random && count++%10 == 0){
-            printf("Resizing\n");
-            int dim = (rand() % 10 + 10) * 32;
-            if (get_current_batch(net)+200 > net->max_batches) dim = 608;
+        if(l.random && count++%10 == 0){//l.random决定是否要多尺度训练，如果多尺度训练的话，每10batches
+            printf("Resizing: ");
+            int dim = (rand() % 10 + 10) * 32;//这边将图片缩放的范围是320-608，可以根据我自己原本的图像的大小更改10,10,32这三个数
+            if (get_current_batch(net)+200 > net->max_batches) dim = 608;//在最后的200batches中，把所有图片都缩放到608（32的19倍数）
             //int dim = (rand() % 4 + 16) * 32;
             printf("%d\n", dim);
-            args.w = dim;
+            args.w = dim; //将网络的输入大小也改成dim
             args.h = dim;
 
-            pthread_join(load_thread, 0);
+            pthread_join(load_thread, 0);//在main函数结束前我们得想办法让程序停下来，pthread_join方法的功能就是等待线程结束，要等的线程就是第一个参数，程序会在这个地方停下来，直到线程结束（否则事先主线程停下来之后，程序所有的资源都会没有了，包括线程），第二个参数用来接受线程函数的返回值，是void**类型的指针，如果没有返回值，就直接设为NULL吧。这边之后，完成了随机选取n张图片（注意：这边批梯度下降法去训练网络每次选取的图片并不是一开始把图打乱，然后一批一批挨个选，而是每次都会把图打乱，然后每次抽取n张），每张图会resize到网络需要的大小（当然前面有多尺度训练，后面会改网络大小），然后会将args.d，即buffer中的X与y赋值，X包含整个这一批resize之后的图像，y则包含这一批图像的框的信息（都是一行对应一张图片，这边得注意的是一张图会给设定一个框数量的最大值）
             train = buffer;
             free_data(train);
             load_thread = load_data(args);
 
             for(i = 0; i < ngpus; ++i){
-                resize_network(nets[i], dim, dim);
+                resize_network(nets[i], dim, dim); //放缩网络的大小进行训练 
             }
             net = nets[0];
         }
+
+        //不进行多尺度训练的话
         time=what_time_is_it_now();
         pthread_join(load_thread, 0);
         train = buffer;
@@ -602,8 +605,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             strtok(input, "\n");
         }
     */
-        image im = load_image_color(input,0,0);
-        image sized = letterbox_image(im, net->w, net->h);
+        image im = load_image_color(input,0,0);//导入原图片
+        image sized = letterbox_image(im, net->w, net->h);//先同比例的缩小放大，再就是生成与网络相同尺寸的图片（貌似用不够的话则用常数补充的来着）
         //image sized = resize_image(im, net->w, net->h);
         //image sized2 = resize_max(im, net->w);
         //image sized = crop_image(sized2, -((net->w - sized2.w)/2), -((net->h - sized2.h)/2), net->w, net->h);

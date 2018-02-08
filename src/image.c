@@ -914,6 +914,7 @@ void letterbox_image_into(image im, int w, int h, image boxed)
 {
     int new_w = im.w;
     int new_h = im.h;
+    //以下是为了维持比例，使得较长的边与规范尺寸相同，另一边按比例变化
     if (((float)w/im.w) < ((float)h/im.h)) {
         new_w = w;
         new_h = (im.h * w)/im.w;
@@ -921,7 +922,7 @@ void letterbox_image_into(image im, int w, int h, image boxed)
         new_h = h;
         new_w = (im.w * h)/im.h;
     }
-    image resized = resize_image(im, new_w, new_h);
+    image resized = resize_image(im, new_w, new_h);//下采样图片
     embed_image(resized, boxed, (w-new_w)/2, (h-new_h)/2); 
     free_image(resized);
 }
@@ -930,6 +931,7 @@ image letterbox_image(image im, int w, int h)
 {
     int new_w = im.w;
     int new_h = im.h;
+    //以下是为了维持比例，使得较长的边与规范尺寸相同，另一边按比例变化
     if (((float)w/im.w) < ((float)h/im.h)) {
         new_w = w;
         new_h = (im.h * w)/im.w;
@@ -942,7 +944,7 @@ image letterbox_image(image im, int w, int h)
     fill_image(boxed, .5);
     //int i;
     //for(i = 0; i < boxed.w*boxed.h*boxed.c; ++i) boxed.data[i] = 0;
-    embed_image(resized, boxed, (w-new_w)/2, (h-new_h)/2); 
+    embed_image(resized, boxed, (w-new_w)/2, (h-new_h)/2); //(w-new_w)/2, (h-new_h)/2中有一个是0，一个是正的
     free_image(resized);
     return boxed;
 }
@@ -1315,29 +1317,31 @@ void saturate_exposure_image(image im, float sat, float exposure)
 
 image resize_image(image im, int w, int h)
 {
-    image resized = make_image(w, h, im.c);   
+    image resized = make_image(w, h, im.c);//dst图像
     image part = make_image(w, im.h, im.c);
     int r, c, k;
     float w_scale = (float)(im.w - 1) / (w - 1);
     float h_scale = (float)(im.h - 1) / (h - 1);
-    for(k = 0; k < im.c; ++k){
-        for(r = 0; r < im.h; ++r){
-            for(c = 0; c < w; ++c){
+    //按宽(长边) 等比例得到part
+    for(k = 0; k < im.c; ++k){  //通道
+        for(r = 0; r < im.h; ++r){ //高，对应行
+            for(c = 0; c < w; ++c){  //宽，对应列
                 float val = 0;
                 if(c == w-1 || im.w == 1){
-                    val = get_pixel(im, im.w-1, r, k);
+                    val = get_pixel(im, im.w-1, r, k);//取的是该位置的元素
                 } else {
-                    float sx = c*w_scale;
+                    float sx = c*w_scale;//sx=0,则对应原来图中的0; 1则对应w_scale; w-1则对应im.w - 1
                     int ix = (int) sx;
                     float dx = sx - ix;
-                    val = (1 - dx) * get_pixel(im, ix, r, k) + dx * get_pixel(im, ix+1, r, k);
+                    val = (1 - dx) * get_pixel(im, ix, r, k) + dx * get_pixel(im, ix+1, r, k);//下采样,去对应原图的都是哪些点，然后塞进去
                 }
                 set_pixel(part, c, r, k, val);
             }
         }
     }
-    for(k = 0; k < im.c; ++k){
-        for(r = 0; r < h; ++r){
+    //再从part到resized, 按高（短边）扩充像素点
+    for(k = 0; k < im.c; ++k){ //通道
+        for(r = 0; r < h; ++r){ //高，对应行
             float sy = r*h_scale;
             int iy = (int) sy;
             float dy = sy - iy;
@@ -1439,7 +1443,7 @@ image load_image(char *filename, int w, int h, int c)
 #else
     image out = load_image_stb(filename, c);
 #endif
-
+    //这边是如果定义了h与w的值，并且定义的与原来图像尺寸不一样的话，则在resize,返回resize之后的图片
     if((h && w) && (h != out.h || w != out.w)){
         image resized = resize_image(out, w, h);
         free_image(out);
