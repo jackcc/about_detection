@@ -1,6 +1,0 @@
-classes= 4
-train  = /root/data_src/pascal_voc_data/train.txt
-valid  = /root/data_src/pascal_voc_data/2007_test.txt
-names = data/voc.names
-backup = backup
-
