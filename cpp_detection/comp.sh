@@ -1,0 +1,3 @@
+gcc -DOPENCV -I/usr/local/include/opencv -I/usr/local/include   -DGPU -I/usr/local/cuda/include/ -DCUDNN  -Wall -Wno-unknown-pragmas -Wfatal-errors -fPIC -Ofast -DOPENCV -DGPU -DCUDNN detect.c libdetect.a -o detect.bin -lm -pthread  -L/usr/lib/x85_64-linux-gnu/ -lopencv_calib3d -lopencv_contrib -lopencv_core -lopencv_features2d -lopencv_flann -lopencv_gpu -lopencv_highgui -lopencv_imgproc -lopencv_legacy -lopencv_ml -lopencv_objdetect -lopencv_ocl -lopencv_photo -lopencv_stitching -lopencv_superres -lopencv_ts -lopencv_video -lopencv_videostab -L/usr/local/cuda/lib64 -lcuda -lcudart -lcublas -lcurand -lcudnn -lstdc++  libdetect.a
+
+./detect.bin data/model/label data/model/vehicle.cfg data/model/yolo.backup /tmp/aaa -out ./
