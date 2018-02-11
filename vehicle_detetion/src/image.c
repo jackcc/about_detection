@@ -10,6 +10,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#define CHINESE
+
 int windows = 0;
 
 float colors[6][3] = { {1,0,1}, {0,0,1},{0,1,1},{0,1,0},{1,1,0},{1,0,0} };
@@ -145,6 +147,22 @@ image get_label(image **characters, char *string, int size)
     return b;
 }
 
+#ifdef CHINESE
+image get_label_chinese(image **characters, int class, int size)
+{
+    if(size > 7) size = 7;
+    image label = make_empty_image(0,0,0);
+
+    image l = characters[size][class];
+    image n = tile_images(label, l, -size - 1 + (size+1)/2);
+    free_image(label);
+    label = n;
+
+    image b = border_image(label, label.h*.25);
+    free_image(label);
+    return b;
+}
+#endif
 void draw_label(image a, int r, int c, image label, const float *rgb)
 {
     int w = label.w;
@@ -226,11 +244,19 @@ image **load_alphabet()
     image **alphabets = calloc(nsize, sizeof(image));
     for(j = 0; j < nsize; ++j){
         alphabets[j] = calloc(128, sizeof(image));
+#ifdef CHINESE
+        for(i = 0; i < 5; ++i){
+            char buff[256];
+            sprintf(buff, "data/labels/cn_%d_%d.png", i, j);
+            alphabets[j][i] = load_image_color(buff, 0, 0);
+        }
+#else
         for(i = 32; i < 127; ++i){
             char buff[256];
             sprintf(buff, "data/labels/%d_%d.png", i, j);
             alphabets[j][i] = load_image_color(buff, 0, 0);
         }
+#endif
     }
     return alphabets;
 }
@@ -283,6 +309,10 @@ void draw_detections(image im, int num, float thresh, box *boxes, float **probs,
             int top   = (b.y-b.h/2.)*im.h;
             int bot   = (b.y+b.h/2.)*im.h;
 
+            //added 20180126
+            printf("left:%d right:%d top:%d bot:%d\n", left,right,top,bot);
+            //
+
             if(left < 0) left = 0;
             if(right > im.w-1) right = im.w-1;
             if(top < 0) top = 0;
@@ -290,7 +320,13 @@ void draw_detections(image im, int num, float thresh, box *boxes, float **probs,
 
             draw_box_width(im, left, top, right, bot, width, red, green, blue);
             if (alphabet) {
-                image label = get_label(alphabet, labelstr, (im.h*.03)/10);
+#ifdef CHINESE
+                image label = get_label_chinese(alphabet, class, (im.h*.03)/10);
+                //image label = get_label_chinese(alphabet, labelstr, (im.h*.03)/10);
+#else
+                image label = get_label(alphabet, names[class], (im.h*.03)/10);
+#endif
+                //image label = get_label(alphabet, labelstr, (im.h*.03)/10);
                 draw_label(im, top + width, left, label, rgb);
                 free_image(label);
             }
@@ -914,7 +950,6 @@ void letterbox_image_into(image im, int w, int h, image boxed)
 {
     int new_w = im.w;
     int new_h = im.h;
-    //以下是为了维持比例，使得较长的边与规范尺寸相同，另一边按比例变化
     if (((float)w/im.w) < ((float)h/im.h)) {
         new_w = w;
         new_h = (im.h * w)/im.w;
@@ -922,7 +957,7 @@ void letterbox_image_into(image im, int w, int h, image boxed)
         new_h = h;
         new_w = (im.w * h)/im.h;
     }
-    image resized = resize_image(im, new_w, new_h);//下采样图片
+    image resized = resize_image(im, new_w, new_h);
     embed_image(resized, boxed, (w-new_w)/2, (h-new_h)/2); 
     free_image(resized);
 }
@@ -931,7 +966,6 @@ image letterbox_image(image im, int w, int h)
 {
     int new_w = im.w;
     int new_h = im.h;
-    //以下是为了维持比例，使得较长的边与规范尺寸相同，另一边按比例变化
     if (((float)w/im.w) < ((float)h/im.h)) {
         new_w = w;
         new_h = (im.h * w)/im.w;
@@ -944,7 +978,7 @@ image letterbox_image(image im, int w, int h)
     fill_image(boxed, .5);
     //int i;
     //for(i = 0; i < boxed.w*boxed.h*boxed.c; ++i) boxed.data[i] = 0;
-    embed_image(resized, boxed, (w-new_w)/2, (h-new_h)/2); //(w-new_w)/2, (h-new_h)/2中有一个是0，一个是正的
+    embed_image(resized, boxed, (w-new_w)/2, (h-new_h)/2); 
     free_image(resized);
     return boxed;
 }
@@ -1317,31 +1351,29 @@ void saturate_exposure_image(image im, float sat, float exposure)
 
 image resize_image(image im, int w, int h)
 {
-    image resized = make_image(w, h, im.c);//dst图像
+    image resized = make_image(w, h, im.c);   
     image part = make_image(w, im.h, im.c);
     int r, c, k;
     float w_scale = (float)(im.w - 1) / (w - 1);
     float h_scale = (float)(im.h - 1) / (h - 1);
-    //按宽(长边) 等比例得到part
-    for(k = 0; k < im.c; ++k){  //通道
-        for(r = 0; r < im.h; ++r){ //高，对应行
-            for(c = 0; c < w; ++c){  //宽，对应列
+    for(k = 0; k < im.c; ++k){
+        for(r = 0; r < im.h; ++r){
+            for(c = 0; c < w; ++c){
                 float val = 0;
                 if(c == w-1 || im.w == 1){
-                    val = get_pixel(im, im.w-1, r, k);//取的是该位置的元素
+                    val = get_pixel(im, im.w-1, r, k);
                 } else {
-                    float sx = c*w_scale;//sx=0,则对应原来图中的0; 1则对应w_scale; w-1则对应im.w - 1
+                    float sx = c*w_scale;
                     int ix = (int) sx;
                     float dx = sx - ix;
-                    val = (1 - dx) * get_pixel(im, ix, r, k) + dx * get_pixel(im, ix+1, r, k);//下采样,去对应原图的都是哪些点，然后塞进去
+                    val = (1 - dx) * get_pixel(im, ix, r, k) + dx * get_pixel(im, ix+1, r, k);
                 }
                 set_pixel(part, c, r, k, val);
             }
         }
     }
-    //再从part到resized, 按高（短边）扩充像素点
-    for(k = 0; k < im.c; ++k){ //通道
-        for(r = 0; r < h; ++r){ //高，对应行
+    for(k = 0; k < im.c; ++k){
+        for(r = 0; r < h; ++r){
             float sy = r*h_scale;
             int iy = (int) sy;
             float dy = sy - iy;
@@ -1443,7 +1475,7 @@ image load_image(char *filename, int w, int h, int c)
 #else
     image out = load_image_stb(filename, c);
 #endif
-    //这边是如果定义了h与w的值，并且定义的与原来图像尺寸不一样的话，则在resize,返回resize之后的图片
+
     if((h && w) && (h != out.h || w != out.w)){
         image resized = resize_image(out, w, h);
         free_image(out);
