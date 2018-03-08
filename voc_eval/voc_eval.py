@@ -1,9 +1,12 @@
+<<<<<<< HEAD
 # --------------------------------------------------------
 # Fast/er R-CNN
 # Licensed under The MIT License [see LICENSE for details]
 # Written by Bharath Hariharan
 # Rewritten by lucky-ing,mitt
 # --------------------------------------------------------
+=======
+>>>>>>> 4e82f354fa9be428efee34243e7c9f0873455500
 
 import xml.etree.ElementTree as ET
 import os
